@@ -6,11 +6,6 @@ internal static class SteamProcessGuard
 {
     public static bool IsSteamRunning()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return false;
-        }
-
         Process[] processes;
         try
         {
@@ -36,9 +31,9 @@ internal static class SteamProcessGuard
     }
 
     public static string CloseSteamInstructions =>
-        "Steam is currently running and is locking OpenSteamTool files.\n\n" +
+        "Steam is currently running.\n\n" +
         "1. In Steam, open Steam > Exit.\n" +
         "2. Wait until the Steam tray icon disappears.\n" +
-        "3. Choose Install / Repair OpenSteamTool again.\n\n" +
-        "TOST has not applied any files.";
+        "3. Try your action again.\n\n" +
+        "TOST requires Steam to be closed so that Steam does not overwrite configuration changes on exit.";
 }

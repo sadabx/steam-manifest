@@ -173,26 +173,38 @@ public sealed partial class App : Application
         };
         var close = new Button
         {
-            Content = "X",
+            Content = new TextBlock
+            {
+                Text = "\u00D7",
+                FontSize = 18,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                Foreground = Brush.Parse("#8A9A9F")
+            },
             Width = 38,
-            Height = 32,
+            Height = 38,
             Padding = new Thickness(0),
-            Background = Brushes.Transparent
+            Background = Brushes.Transparent,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center
         };
         close.Click += (_, _) => window.Close();
         var header = new Grid
         {
             Height = 38,
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Background = Brush.Parse("#232426"),
+            Background = Brush.Parse("#1C2022"),
             Children =
             {
                 new TextBlock
                 {
                     Text = title,
-                    Margin = new Thickness(12, 0),
+                    Margin = new Thickness(14, 0),
                     VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                    FontSize = 13
+                    FontSize = 13,
+                    Foreground = Brush.Parse("#B8C8C0"),
+                    FontWeight = Avalonia.Media.FontWeight.Medium
                 },
                 close
             }

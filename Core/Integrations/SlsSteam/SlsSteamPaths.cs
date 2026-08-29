@@ -6,6 +6,7 @@ public sealed record SlsSteamPaths(
     string MainLibraryPath,
     string InjectorLibraryPath,
     string ConfigPath,
+    string SteamWrapperPath,
     IReadOnlyList<string> LogPaths)
 {
     public static SlsSteamPaths ForCurrentUser(
@@ -32,6 +33,7 @@ public sealed record SlsSteamPaths(
             Path.Combine(dataDirectory, "SLSsteam.so"),
             Path.Combine(dataDirectory, "library-inject.so"),
             Path.Combine(configDirectory, "config.yaml"),
+            Path.Combine(dataDirectory, "path", "steam"),
             new[]
             {
                 Path.Combine(homeDirectory, ".SLSsteam.log"),
@@ -56,6 +58,7 @@ public sealed record SlsSteamPaths(
             Path.Combine(dataDirectory, "SLSsteam.so"),
             Path.Combine(dataDirectory, "library-inject.so"),
             Path.Combine(configDirectory, "config.yaml"),
+            Path.Combine(dataDirectory, "path", "steam"),
             [Path.Combine(flatpakHome, ".SLSsteam.log")]);
     }
 

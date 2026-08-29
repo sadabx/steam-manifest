@@ -15,28 +15,23 @@ internal sealed class GameManagerView : UserControl
     private readonly ComboBox installation = new() { Width = 245 };
     private readonly Grid targetBar;
     private readonly ListBox games = new();
-    private readonly ListBox recovery = new();
     private readonly TextBlock status = new()
     {
         Foreground = Brush.Parse("#AFC0B4"),
         TextWrapping = TextWrapping.Wrap
     };
     private readonly Button remove = PrimaryButton("Remove Selected");
-    private readonly Button restore = PrimaryButton("Restore Selected");
     private IReadOnlyList<ManagedGame> managedGames = [];
     private int refreshGeneration;
 
     public GameManagerView()
     {
         remove.IsEnabled = false;
-        restore.IsEnabled = false;
 
         var refresh = SecondaryButton("Refresh");
         refresh.Click += async (_, _) => await RefreshAsync();
         installation.SelectionChanged += async (_, _) => await RefreshAsync();
-        recovery.SelectionChanged += (_, _) => UpdateActions();
         remove.Click += async (_, _) => await RemoveSelectedAsync();
-        restore.Click += async (_, _) => await RestoreSelectedAsync();
 
         games.ItemTemplate = new FuncDataTemplate<GameItem>((item, _) => CreateGameRow(item));
 
@@ -54,14 +49,7 @@ internal sealed class GameManagerView : UserControl
         Grid.SetColumn(installation, 1);
         targetBar.Children.Add(installation);
 
-        var tabs = new TabControl
-        {
-            ItemsSource = new TabItem[]
-            {
-                new TabItem { Header = "Managed Games", Content = CreateManagedPage(refresh) },
-                new TabItem { Header = "Recovery", Content = CreateRecoveryPage() }
-            }
-        };
+        var mainPage = CreateManagedPage(refresh);
 
         var root = new Grid
         {
@@ -70,8 +58,8 @@ internal sealed class GameManagerView : UserControl
             Margin = new Thickness(4)
         };
         root.Children.Add(targetBar);
-        Grid.SetRow(tabs, 1);
-        root.Children.Add(tabs);
+        Grid.SetRow(mainPage, 1);
+        root.Children.Add(mainPage);
         Grid.SetRow(status, 2);
         root.Children.Add(status);
         Content = root;
@@ -88,8 +76,8 @@ internal sealed class GameManagerView : UserControl
         var description = new TextBlock
         {
             Text = DesktopPlatform.UsesOpenSteamTool
-                ? "Games detected from Steam's config\\lua folder. Removal moves only the Lua file and its unshared depot manifests into TOST's recovery folder."
-                : "Games detected from SLSsteam's plugin folder. Removal moves the Lua file and its unshared depot manifests into TOST's recovery folder.",
+                ? "Games detected from Steam's config\\lua folder. Removal will permanently delete the Lua file and its unshared depot manifests."
+                : "Games detected from SLSsteam's plugin folder. Removal will permanently delete the Lua file and its unshared depot manifests.",
             Foreground = Brush.Parse("#B7C1BA"),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(8, 10, 8, 8)
@@ -116,36 +104,12 @@ internal sealed class GameManagerView : UserControl
         return page;
     }
 
-    private Control CreateRecoveryPage()
-    {
-        var description = new TextBlock
-        {
-            Text = "Files removed through TOST remain recoverable here.",
-            Foreground = Brush.Parse("#B7C1BA"),
-            Margin = new Thickness(8, 10, 8, 8)
-        };
-        var actions = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(8, 8, 8, 6),
-            Children = { restore }
-        };
-        var page = new Grid
-        {
-            RowDefinitions = new RowDefinitions("Auto,*,Auto")
-        };
-        page.Children.Add(description);
-        Grid.SetRow(recovery, 1);
-        page.Children.Add(recovery);
-        Grid.SetRow(actions, 2);
-        page.Children.Add(actions);
-        return page;
-    }
+
 
     private static Grid CreateGameHeader()
     {
         var header = CreateGameGrid();
-        header.Background = Brush.Parse("#F1F1F1");
+        header.Background = Brush.Parse("#2A2F33");
         header.Children.Add(HeaderText("Game", 0));
         header.Children.Add(HeaderText("App ID", 1));
         header.Children.Add(HeaderText("Lua file", 2));
@@ -192,9 +156,10 @@ internal sealed class GameManagerView : UserControl
         var label = new TextBlock
         {
             Text = text,
-            Foreground = Brushes.Black,
+            Foreground = Brush.Parse("#9BADB4"),
             Margin = new Thickness(8, 5),
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            FontWeight = Avalonia.Media.FontWeight.SemiBold
         };
         Grid.SetColumn(label, column);
         return label;
@@ -242,7 +207,6 @@ internal sealed class GameManagerView : UserControl
         {
             managedGames = [];
             games.ItemsSource = Array.Empty<GameItem>();
-            recovery.ItemsSource = Array.Empty<ArchiveItem>();
             UpdateActions();
             return;
         }
@@ -252,9 +216,6 @@ internal sealed class GameManagerView : UserControl
             var refreshedGames = service.FindManagedGames(steam);
             managedGames = refreshedGames;
             games.ItemsSource = refreshedGames.Select(game => new GameItem(game)).ToArray();
-            recovery.ItemsSource = service.FindRemovedGames(RecoveryRoot)
-                .Select(item => new ArchiveItem(item))
-                .ToArray();
             status.Text = $"Found {managedGames.Count} managed game{(managedGames.Count == 1 ? "" : "s")}.";
 
             var missingNames = refreshedGames.Where(game => string.IsNullOrWhiteSpace(game.Name)).Select(game => game.AppId).ToArray();
@@ -286,7 +247,6 @@ internal sealed class GameManagerView : UserControl
     {
         remove.IsEnabled = games.ItemsSource?.OfType<GameItem>().Any(item => item.Selected) == true &&
                            SelectedInstallation is not null;
-        restore.IsEnabled = recovery.SelectedItem is ArchiveItem && SelectedInstallation is not null;
     }
 
     private async Task RemoveSelectedAsync()
@@ -309,13 +269,13 @@ internal sealed class GameManagerView : UserControl
         if (!await TostDialog.ConfirmAsync(
                 this,
                 "Remove Managed Games",
-                $"Archive the following games?{Environment.NewLine}{Environment.NewLine}{names}{Environment.NewLine}{Environment.NewLine}They can be restored from Recovery.",
+                $"Permanently delete the following games?{Environment.NewLine}{Environment.NewLine}{names}{Environment.NewLine}{Environment.NewLine}This action cannot be undone.",
                 "Remove"))
         {
             return;
         }
 
-        var result = service.RemoveGames(selected, managedGames, steam, RecoveryRoot);
+        var result = service.RemoveGames(selected, managedGames, steam);
         status.Text = result.Message;
         if (result.Success)
         {
@@ -323,30 +283,7 @@ internal sealed class GameManagerView : UserControl
         }
     }
 
-    private async Task RestoreSelectedAsync()
-    {
-        if (SelectedInstallation is not { } steam || recovery.SelectedItem is not ArchiveItem item)
-        {
-            return;
-        }
 
-        var names = string.Join(", ", item.Archive.Games.Select(game => game.DisplayName));
-        if (!await TostDialog.ConfirmAsync(
-                this,
-                "Restore Managed Games",
-                $"Restore {names}? Existing files will not be overwritten.",
-                "Restore"))
-        {
-            return;
-        }
-
-        var result = service.RestoreArchive(item.Archive, steam, RecoveryRoot);
-        status.Text = result.Message;
-        if (result.Success)
-        {
-            await RefreshAsync();
-        }
-    }
 
     private static Button PrimaryButton(string text) => new()
     {
@@ -367,11 +304,5 @@ internal sealed class GameManagerView : UserControl
     {
         public ManagedGame Game { get; } = game;
         public bool Selected { get; set; }
-    }
-
-    private sealed record ArchiveItem(RemovedGameArchive Archive)
-    {
-        public override string ToString() =>
-            $"{Archive.RemovedUtc.ToLocalTime():g}  -  {string.Join(", ", Archive.Games.Select(game => game.DisplayName))}  -  {Archive.Files.Count} files";
     }
 }

@@ -22,6 +22,8 @@ public sealed class SlsSteamImportConfigService
         return new SlsSteamImportConfigPreview(sections.Count > 0, text, sections);
     }
 
+    public const string DefaultConfig = "SafeMode: no\nNotifications: yes\nNotifyInit: yes\nLogLevels: 3\nAPI: yes\nDisableFamilyShareLock: no\nUseWhitelist: no\nMaxSchemaTries: 5\nWarnHashMissmatch: yes\nAdditionalApps:\nDlcData:\nAppTokens:\nManifestIds:\n";
+
     public SlsSteamConfigWriteResult Apply(
         string configPath,
         SlsSteamImportConversionPlan plan,
@@ -31,7 +33,11 @@ public sealed class SlsSteamImportConfigService
         if (!preview.ChangesFile)
             return new SlsSteamConfigWriteResult(false, null, Path.GetFullPath(configPath));
 
-        var backup = new SlsSteamConfigService().CreateBackup(configPath, backupDirectory);
+        SlsSteamConfigBackup? backup = null;
+        if (File.Exists(configPath))
+        {
+            backup = new SlsSteamConfigService().CreateBackup(configPath, backupDirectory);
+        }
         WriteAtomic(configPath, StrictUtf8.GetBytes(preview.UpdatedText));
         return new SlsSteamConfigWriteResult(true, backup, Path.GetFullPath(configPath));
     }
@@ -46,6 +52,7 @@ public sealed class SlsSteamImportConfigService
         if (values.Length > 0) replacement += NewLine(text);
         return ReplaceIfChanged(text, key, replacement, changed);
     }
+
 
     private static string MergeMap(string text, string key, IReadOnlyDictionary<string, string> incoming, List<string> changed)
     {
@@ -64,7 +71,13 @@ public sealed class SlsSteamImportConfigService
     {
         var matches = TopLevelPattern.Matches(text);
         var matching = matches.Where(match => match.Groups["key"].Value.Equals(key, StringComparison.Ordinal)).ToArray();
-        if (matching.Length != 1) throw new InvalidDataException($"SLSsteam configuration must contain exactly one {key} section.");
+        if (matching.Length == 0)
+        {
+            // Key doesn't exist — treat as an empty section at the end of the file.
+            // The caller will append it when writing.
+            return (text.Length, 0, []);
+        }
+        if (matching.Length > 1) throw new InvalidDataException($"SLSsteam configuration contains multiple {key} sections.");
         var match = matching[0];
         var next = matches.FirstOrDefault(item => item.Index > match.Index);
         var end = next?.Index ?? text.Length;
@@ -85,8 +98,13 @@ public sealed class SlsSteamImportConfigService
 
     private static string Read(string path)
     {
-        var info = new FileInfo(Path.GetFullPath(path));
-        if (!info.Exists || info.LinkTarget is not null || info.Length is <= 0 or > SlsSteamConfigService.MaximumConfigBytes)
+        var fullPath = Path.GetFullPath(path);
+        if (!File.Exists(fullPath))
+        {
+            return DefaultConfig;
+        }
+        var info = new FileInfo(fullPath);
+        if (info.LinkTarget is not null || info.Length is <= 0 or > SlsSteamConfigService.MaximumConfigBytes)
             throw new InvalidDataException("SLSsteam config must be a bounded regular file.");
         try { return StrictUtf8.GetString(File.ReadAllBytes(info.FullName)); }
         catch (DecoderFallbackException ex) { throw new InvalidDataException("SLSsteam config is not valid UTF-8.", ex); }
@@ -98,6 +116,7 @@ public sealed class SlsSteamImportConfigService
     {
         var fullPath = Path.GetFullPath(path);
         var directory = Path.GetDirectoryName(fullPath) ?? throw new InvalidOperationException("Invalid config path.");
+        Directory.CreateDirectory(directory);
         var temporary = Path.Combine(directory, $".config.yaml.tost-{Guid.NewGuid():N}.tmp");
         try
         {

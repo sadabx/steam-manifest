@@ -79,17 +79,27 @@ internal sealed class DropToastWindow : Window
         }
 
         var scale = screen.Scaling;
-        var width = (int)Math.Ceiling(Width * scale);
-        var height = (int)Math.Ceiling(Math.Max(120, Height) * scale);
-        var x = owner.Position.X + (int)Math.Ceiling(owner.Width * scale) + 8;
+        var actualWidth = double.IsNaN(Width) ? (Bounds.Width > 0 ? Bounds.Width : 350) : Width;
+        var actualHeight = double.IsNaN(Height) ? (Bounds.Height > 0 ? Bounds.Height : 150) : Height;
+        var ownerWidth = double.IsNaN(owner.Width) ? owner.Bounds.Width : owner.Width;
+        var ownerHeight = double.IsNaN(owner.Height) ? owner.Bounds.Height : owner.Height;
+
+        var width = (int)Math.Ceiling(actualWidth * scale);
+        var height = (int)Math.Ceiling(Math.Max(120, actualHeight) * scale);
+        var x = owner.Position.X + (int)Math.Ceiling(ownerWidth * scale) + 8;
+        
         if (x + width > screen.WorkingArea.Right)
         {
             x = owner.Position.X - width - 8;
         }
 
-        var y = owner.Position.Y - (height - (int)Math.Ceiling(owner.Height * scale)) / 2;
+        var y = owner.Position.Y - (height - (int)Math.Ceiling(ownerHeight * scale)) / 2;
+        
+        var maxX = Math.Max(screen.WorkingArea.X, screen.WorkingArea.Right - width);
+        var maxY = Math.Max(screen.WorkingArea.Y, screen.WorkingArea.Bottom - height);
+
         Position = new PixelPoint(
-            Math.Clamp(x, screen.WorkingArea.X, screen.WorkingArea.Right - width),
-            Math.Clamp(y, screen.WorkingArea.Y, screen.WorkingArea.Bottom - height));
+            Math.Clamp(x, screen.WorkingArea.X, maxX),
+            Math.Clamp(y, screen.WorkingArea.Y, maxY));
     }
 }

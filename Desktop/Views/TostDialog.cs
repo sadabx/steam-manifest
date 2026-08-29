@@ -56,28 +56,39 @@ internal static class TostDialog
 
         var close = new Button
         {
-            Content = "X",
-            Width = 34,
-            Height = 30,
+            Content = new TextBlock
+            {
+                Text = "\u00D7",
+                FontSize = 18,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = Brush.Parse("#8A9A9F")
+            },
+            Width = 38,
+            Height = 38,
             Padding = new Thickness(0),
             Background = Brushes.Transparent,
-            HorizontalAlignment = HorizontalAlignment.Right
+            VerticalAlignment = VerticalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center
         };
         close.Click += (_, _) => dialog.Close();
 
         var header = new Grid
         {
-            Height = 42,
+            Height = 38,
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            Background = Brush.Parse("#1C2022"),
             Children =
             {
                 new TextBlock
                 {
                     Text = title,
-                    Margin = new Thickness(18, 0),
+                    Margin = new Thickness(14, 0),
                     VerticalAlignment = VerticalAlignment.Center,
-                    FontSize = 14,
-                    FontWeight = FontWeight.SemiBold
+                    FontSize = 13,
+                    Foreground = Brush.Parse("#B8C8C0"),
+                    FontWeight = FontWeight.Medium
                 },
                 close
             }

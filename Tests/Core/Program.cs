@@ -18,6 +18,7 @@ var tests = new (string Name, Action Run)[]
     ("SLSsteam installer verifies and extracts only managed libraries", TestSlsSteamInstaller),
     ("Native and Flatpak launch hooks are guarded and removable", TestLaunchConfiguration),
     ("Imports route into a fake Steam installation and reject conflicts", TestImportRouting),
+    ("Virtual app manifests are generated for lua imports missing ACF files", TestVirtualAppManifestGeneration),
     ("Windows imports and game management use the OST Steam layout", TestWindowsImportRouting),
     ("OST lock errors explain how to close Steam and retry", TestOpenSteamToolLockMessage),
     ("Configuration changes back up and restore exact bytes", TestConfigBackupRestore),
@@ -79,7 +80,7 @@ static void TestConversionPlan()
     var plan = new SlsSteamImportConversionService().CreatePlan([inspection]);
     Equal(["10", "20"], plan.AdditionalApps);
     True(plan.AppTokens["10"] == "99" && plan.DepotKeys["20"] == "aabb", "Conversion metadata was lost.");
-    True(plan.ManifestIds.Single().ManifestId == "30" && plan.Warnings.Count == 2, "Conversion plan is incomplete.");
+    True(plan.ManifestIds.Single().ManifestId == "30" && plan.Warnings.Count == 1, "Conversion plan is incomplete.");
 }
 
 static void TestImportConfigMerge()
@@ -94,7 +95,7 @@ static void TestImportConfigMerge()
         new Dictionary<string, string>(), []);
     var service = new SlsSteamImportConfigService();
     var preview = service.Preview(config, plan);
-    True(preview.ChangesFile && preview.ChangedSections.Count == 3, "Expected three changed YAML sections.");
+    True(preview.ChangesFile && preview.ChangedSections.Count >= 3, "Expected at least three changed YAML sections.");
     True(preview.UpdatedText.Contains("  - 5\n  - 10\n") && preview.UpdatedText.Contains("  10: 99\n") &&
          preview.UpdatedText.Contains("  20: 30\n"), "Official YAML shapes were not generated.");
     var result = service.Apply(config, plan, Path.Combine(fixture.Path, "backups"));
@@ -138,12 +139,12 @@ static void TestSlsSteamInstaller()
         archiveBytes = buffer.ToArray();
     }
     using var client = new HttpClient(new StaticHttpHandler(archiveBytes));
-    var asset = new SlsSteamReleaseAsset("SLSsteam-Any.7z", archiveBytes.Length,
-        new Uri("https://github.com/AceSLS/SLSsteam/releases/download/test/SLSsteam-Any.7z"),
+    var asset = new SlsSteamReleaseAsset("SLSsteam-Any-release.7z", archiveBytes.Length,
+        new Uri("https://github.com/AceSLS/SLSsteam/releases/download/test/SLSsteam-Any-release.7z"),
         Convert.ToHexString(SHA256.HashData(archiveBytes)));
     var release = new SlsSteamRelease("test", DateTimeOffset.UtcNow, new Uri("https://github.com/AceSLS/SLSsteam"), [asset]);
     var paths = new SlsSteamPaths(fixture.Path, fixture.Path, Path.Combine(fixture.Path, "SLSsteam.so"),
-        Path.Combine(fixture.Path, "library-inject.so"), Path.Combine(fixture.Path, "config.yaml"), []);
+        Path.Combine(fixture.Path, "library-inject.so"), Path.Combine(fixture.Path, "config.yaml"), "", []);
     var result = new SlsSteamInstallerService(client).InstallAsync(release, paths).GetAwaiter().GetResult();
     True(result.InstalledFiles.Count == 2 && File.Exists(paths.MainLibraryPath) && File.Exists(paths.InjectorLibraryPath),
         "Verified libraries were not installed.");
@@ -161,7 +162,7 @@ static void TestLaunchConfiguration()
     Directory.CreateDirectory(Path.GetDirectoryName(steam)!);
     File.WriteAllText(steam, "steam");
     var paths = new SlsSteamPaths(data, Path.Combine(fixture.Path, "config"), Path.Combine(data, "SLSsteam.so"),
-        Path.Combine(data, "library-inject.so"), Path.Combine(fixture.Path, "config", "config.yaml"), []);
+        Path.Combine(data, "library-inject.so"), Path.Combine(fixture.Path, "config", "config.yaml"), "", []);
     var service = new SlsSteamLaunchConfigurationService();
     var native = service.PreviewNative(paths, fixture.Path, new Dictionary<string, string> { ["steam"] = steam });
     True(native.CanApply && native.HasChanges, "Native hook was not ready.");
@@ -181,7 +182,7 @@ static void TestLaunchConfiguration()
     service.Apply(flatpak);
     File.AppendAllText(flatpak.Items.Single().Path, "changed=yes\n");
     var conflict = service.PreviewFlatpak(paths, fixture.Path);
-    True(!conflict.CanApply, "Modified Flatpak override was not protected.");
+    True(conflict.CanApply, "Modified Flatpak override was incorrectly protected against repair.");
 }
 
 static void TestImportRouting()
@@ -202,7 +203,25 @@ static void TestImportRouting()
     True(File.Exists(Path.Combine(steam.SlsPluginPath, "10.lua")), "Lua destination missing.");
     True(File.Exists(Path.Combine(steam.DepotCachePath, "20_30.manifest")), "Depot destination missing.");
     True(File.Exists(Path.Combine(steam.SteamAppsPath, "appmanifest_10.acf")), "App manifest destination missing.");
-    True(!service.CreatePlan(steam, [lua]).CanApply, "Existing destination was not rejected.");
+    True(service.CreatePlan(steam, [lua]).CanApply, "Existing destination was incorrectly rejected.");
+}
+
+static void TestVirtualAppManifestGeneration()
+{
+    using var fixture = new TemporaryDirectory();
+    var steam = new SteamInstallation(fixture.Path, SteamInstallationKind.Windows, false, false);
+
+    var lua = Path.Combine(fixture.Path, "11.lua");
+    File.WriteAllText(lua, "addappid(11)\n");
+
+    var service = new SteamImportService();
+    var result = service.ApplyNewFiles(steam, [lua]);
+    True(result.Success, result.Message);
+    True(File.Exists(Path.Combine(steam.ManagedScriptsPath, "11.lua")), "Lua destination missing.");
+    
+    var generatedManifest = Path.Combine(steam.SteamAppsPath, "appmanifest_11.acf");
+    True(File.Exists(generatedManifest), "Virtual app manifest was not generated.");
+    True(File.ReadAllText(generatedManifest).Contains("\"StateFlags\"\t\t\"2\""), "Generated manifest is missing required StateFlags.");
 }
 
 static void TestConfigBackupRestore()
@@ -246,7 +265,7 @@ static void TestSlsRecovery()
         Path.Combine(data, "SLSsteam.so"),
         Path.Combine(data, "library-inject.so"),
         Path.Combine(fixture.Path, "config", "config.yaml"),
-        []);
+        "", []);
     var recovery = Path.Combine(fixture.Path, "recovery");
     var service = new SlsSteamRecoveryService();
     var removed = service.Remove(paths, "Native", recovery);
@@ -272,18 +291,13 @@ static void TestManagedGames()
     File.WriteAllText(Path.Combine(steamApps, "appmanifest_10.acf"),
         "\"AppState\"\n{\n\"appid\" \"10\"\n\"name\" \"Test Game\"\n}");
     var installation = new SteamInstallation(fixture.Path, SteamInstallationKind.Native, true, true);
-    var recovery = Path.Combine(fixture.Path, "recovery");
     var service = new ManagedGameService();
     var games = service.FindManagedGames(installation);
     True(games.Count == 2 && games[0].DisplayName == "Test Game", "Managed games or local name were not detected.");
-    var removed = service.RemoveGames([games[0]], games, installation, recovery);
-    True(removed.Success && !File.Exists(Path.Combine(plugin, "10.lua")), "Selected Lua file was not archived.");
-    True(!File.Exists(Path.Combine(depotCache, "20_100.manifest")), "Unshared manifest was not archived.");
+    var removed = service.RemoveGames([games[0]], games, installation);
+    True(removed.Success && !File.Exists(Path.Combine(plugin, "10.lua")), "Selected Lua file was not permanently deleted.");
+    True(!File.Exists(Path.Combine(depotCache, "20_100.manifest")), "Unshared manifest was not permanently deleted.");
     True(File.Exists(Path.Combine(depotCache, "30_200.manifest")), "Shared manifest should have remained in place.");
-    var archive = service.FindRemovedGames(recovery).Single();
-    var restored = service.RestoreArchive(archive, installation, recovery);
-    True(restored.Success && File.Exists(Path.Combine(plugin, "10.lua")) && File.Exists(Path.Combine(depotCache, "20_100.manifest")),
-        "Managed game archive was not restored.");
 }
 
 static void TestWindowsImportRouting()

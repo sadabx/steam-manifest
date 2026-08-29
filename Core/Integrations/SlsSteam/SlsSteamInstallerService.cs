@@ -18,8 +18,8 @@ public sealed class SlsSteamInstallerService
 
     public SlsSteamInstallPreview Preview(SlsSteamRelease release, SlsSteamPaths paths, bool allowRepair = false)
     {
-        var asset = release.Assets.FirstOrDefault(item => item.Name.Equals("SLSsteam-Any.7z", StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidDataException("The pinned SLSsteam release has no portable SLSsteam-Any.7z asset.");
+        var asset = release.Assets.FirstOrDefault(item => item.Name.Equals("SLSsteam-Any-release.7z", StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException("The pinned SLSsteam release has no portable SLSsteam-Any-release.7z asset.");
         if (asset.Sha256 is null || asset.Sha256.Length != 64 || asset.Sha256.Any(character => !Uri.IsHexDigit(character)))
             throw new InvalidDataException("The pinned SLSsteam asset has no valid published SHA-256 digest.");
         if (asset.SizeBytes is <= 0 or > MaximumDownloadBytes)

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Trionine.TOST.Core.Configuration;
 using Trionine.TOST.Core.Imports;
 using Trionine.TOST.Core.Integrations.SlsSteam;
@@ -184,7 +185,18 @@ internal static class DesktopPlatform
         {
             if (File.Exists(path))
             {
-                yield return path;
+                if (Path.GetExtension(path).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var f in ExpandZip(path, failures)) yield return f;
+                }
+                else if (IsSupportedLinuxImport(path))
+                {
+                    yield return path;
+                }
+                else
+                {
+                    failures.Add($"{Path.GetFileName(path)}: unsupported file type");
+                }
                 continue;
             }
 
@@ -211,6 +223,41 @@ internal static class DesktopPlatform
 
             failures.Add($"{Path.GetFileName(path)}: path does not exist");
         }
+    }
+
+    private static IEnumerable<string> ExpandZip(string path, ICollection<string> failures)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"TOST-{Guid.NewGuid():N}");
+        var extractedFiles = new List<string>();
+        try
+        {
+            using var archive = ZipFile.OpenRead(path);
+            var supportedEntries = archive.Entries.Where(e => IsSupportedLinuxImport(e.Name)).ToList();
+            if (supportedEntries.Count == 0)
+            {
+                failures.Add($"{Path.GetFileName(path)}: contains no supported files");
+                return extractedFiles;
+            }
+
+            Directory.CreateDirectory(tempDir);
+            foreach (var entry in supportedEntries)
+            {
+                var destination = Path.Combine(tempDir, entry.Name);
+                entry.ExtractToFile(destination, overwrite: true);
+                extractedFiles.Add(destination);
+            }
+        }
+        catch (Exception ex)
+        {
+            failures.Add($"{Path.GetFileName(path)}: {ex.Message}");
+        }
+
+        if (extractedFiles.Count == 0 && Directory.Exists(tempDir))
+        {
+            try { Directory.Delete(tempDir, true); } catch { /* ignore */ }
+        }
+
+        return extractedFiles;
     }
 
     private static bool IsSupportedLinuxImport(string path)

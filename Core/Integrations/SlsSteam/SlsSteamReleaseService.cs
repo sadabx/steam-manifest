@@ -62,8 +62,8 @@ public sealed class SlsSteamReleaseService
             foreach (var asset in assetsElement.EnumerateArray())
             {
                 var name = RequiredString(asset, "name");
-                if (!name.Equals("SLSsteam-Any.7z", StringComparison.OrdinalIgnoreCase) &&
-                    !name.Equals("SLSsteam-Arch.pkg.tar.zst", StringComparison.OrdinalIgnoreCase))
+                if (!name.Equals("SLSsteam-Any-release.7z", StringComparison.OrdinalIgnoreCase) &&
+                    !name.Equals("SLSsteam-Arch-release.pkg.tar.zst", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

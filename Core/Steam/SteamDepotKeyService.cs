@@ -19,12 +19,24 @@ public sealed class SteamDepotKeyService
     {
         var text = Read(configPath);
         var root = VdfParser.Parse(text);
-        var depots = Find(root, "InstallConfigStore", "Software", "Valve", "Steam", "depots")
-            ?? throw new InvalidDataException("Steam config.vdf has no InstallConfigStore/Software/Valve/Steam/depots section.");
+        var newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var steamNode = Find(root, "InstallConfigStore", "Software", "Valve", "Steam")
+            ?? throw new InvalidDataException("Steam config.vdf has no InstallConfigStore/Software/Valve/Steam section.");
+        var depots = Find(root, "InstallConfigStore", "Software", "Valve", "Steam", "depots");
+        if (depots is null)
+        {
+            var emptyDepots = new StringBuilder()
+                .Append('\t', steamNode.Depth + 1).Append("\"depots\"").Append(newline)
+                .Append('\t', steamNode.Depth + 1).Append('{').Append(newline)
+                .Append('\t', steamNode.Depth + 1).Append('}').Append(newline);
+            text = text.Insert(steamNode.CloseBraceIndex, emptyDepots.ToString());
+            root = VdfParser.Parse(text);
+            depots = Find(root, "InstallConfigStore", "Software", "Valve", "Steam", "depots")
+                ?? throw new InvalidDataException("Failed to initialize depots section in config.vdf.");
+        }
         var added = new List<string>();
         var conflicts = new List<string>();
         var additions = new StringBuilder();
-        var newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
 
         foreach (var pair in depotKeys.OrderBy(item => ulong.Parse(item.Key)))
         {

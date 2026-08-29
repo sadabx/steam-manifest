@@ -134,7 +134,44 @@ internal sealed class ImportView : UserControl
                 new SlsSteamImportConfigService().Apply(slsPaths.ConfigPath, conversionPlan, Path.Combine(backupRoot, "SLSsteam"));
             if (conversionPlan.DepotKeys.Count > 0)
                 new SteamDepotKeyService().Apply(Path.Combine(selectedSteam.ConfigPath, "config.vdf"), conversionPlan.DepotKeys, Path.Combine(backupRoot, "Steam-config"));
-            output.Text += $"{Environment.NewLine}{Environment.NewLine}Import complete. Restart Steam through the configured SLSsteam launch path.";
+            
+            // Kill Steam and relaunch through the SLSsteam wrapper so licenses are granted
+            var slsLaunchScript = slsPaths.SteamWrapperPath;
+            if (OperatingSystem.IsLinux() && File.Exists(slsLaunchScript))
+            {
+                output.Text += $"{Environment.NewLine}{Environment.NewLine}Restarting Steam through SLSsteam...";
+                try
+                {
+                    // Kill existing steam
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "killall",
+                        Arguments = "steam",
+                        UseShellExecute = false,
+                        RedirectStandardError = true
+                    })?.WaitForExit(2000);
+                    
+                    System.Threading.Thread.Sleep(2000);
+                    
+                    // Relaunch through SLSsteam wrapper
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "/bin/sh",
+                        Arguments = $"\"{slsLaunchScript}\"",
+                        UseShellExecute = false
+                    });
+                    output.Text += $"{Environment.NewLine}Steam restarted! Your games should appear in the Library with an Install button.";
+                }
+                catch (Exception ex)
+                {
+                    output.Text += $"{Environment.NewLine}Could not auto-restart Steam: {ex.Message}{Environment.NewLine}Please restart Steam manually through: {slsLaunchScript}";
+                }
+            }
+            else
+            {
+                output.Text += $"{Environment.NewLine}{Environment.NewLine}Import complete. Restart Steam through: {slsPaths.SteamWrapperPath}";
+            }
+            
             applyButton.IsEnabled = false;
             confirmation.IsChecked = false;
         }

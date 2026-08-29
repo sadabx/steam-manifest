@@ -1,0 +1,44 @@
+# Maintainer: Sadab <sadabsiperkhan@gmail.com>
+
+pkgname=tost-bin
+pkgver=2.0.3
+pkgrel=1
+pkgdesc="Steam integration and compatibility manager (portable release binary)"
+arch=('x86_64')
+url="https://github.com/sadabx/TOST"
+license=('GPL-3.0-only')
+depends=(
+    'fontconfig'
+    'freetype2'
+    'gtk3'
+    'glibc'
+    'libx11'
+    'libxcursor'
+    'libxext'
+    'libxinerama'
+    'libxrandr'
+    'hicolor-icon-theme'
+)
+provides=('tost')
+conflicts=('tost')
+source=(
+    "${pkgname}-${pkgver}.tar.gz::https://github.com/sadabx/TOST/releases/download/v${pkgver}/TOST-${pkgver}-linux-x64.tar.gz"
+    "tost.desktop::https://raw.githubusercontent.com/sadabx/TOST/v${pkgver}/packaging/linux/tost.desktop"
+    "tost.appdata.xml::https://raw.githubusercontent.com/sadabx/TOST/v${pkgver}/packaging/linux/tost.appdata.xml"
+    "tost.png::https://raw.githubusercontent.com/sadabx/TOST/v${pkgver}/Assets/TOST.png"
+)
+sha256sums=(
+    'bf908564dbc0ef777b6842868fda6827c02201010114ae0366f986efe57fbf78'
+    'SKIP'
+    'SKIP'
+    'SKIP'
+)
+
+package() {
+    install -Dm755 "${srcdir}/tost" "${pkgdir}/usr/bin/tost"
+    install -Dm755 "${srcdir}/tost-cli" "${pkgdir}/usr/bin/tost-cli"
+    install -Dm644 "${srcdir}/tost.desktop" "${pkgdir}/usr/share/applications/tost.desktop"
+    install -Dm644 "${srcdir}/tost.appdata.xml" "${pkgdir}/usr/share/metainfo/tost.appdata.xml"
+    install -Dm644 "${srcdir}/tost.png" "${pkgdir}/usr/share/icons/hicolor/512x512/apps/tost.png"
+    install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

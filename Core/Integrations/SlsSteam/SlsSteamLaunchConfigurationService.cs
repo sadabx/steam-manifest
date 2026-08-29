@@ -31,7 +31,7 @@ public sealed class SlsSteamLaunchConfigurationService
             var executable = Path.GetFullPath(pair.Value);
             if (!File.Exists(executable) || executable.StartsWith(wrapperDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal))
                 throw new InvalidDataException($"Native Steam executable is invalid: {executable}");
-            var content = $"{Marker}\n#!/bin/sh\nexport LD_AUDIT={ShellQuote(paths.InjectorLibraryPath + ":" + paths.MainLibraryPath)}\nexec {ShellQuote(executable)} \"$@\"\n";
+            var content = $"#!/bin/sh\n{Marker}\nexport LD_AUDIT={ShellQuote(paths.InjectorLibraryPath + ":" + paths.MainLibraryPath)}\nexec {ShellQuote(executable)} \"$@\"\n";
             items.Add(PlanNewFile(Path.Combine(wrapperDirectory, pair.Key), content, executable: true));
         }
         if (items.Count == 0) throw new InvalidDataException("No native Steam executables were found on PATH.");
@@ -83,7 +83,7 @@ public sealed class SlsSteamLaunchConfigurationService
         {
             if (!File.Exists(item.Path)) continue;
             var current = File.ReadAllText(item.Path, Utf8);
-            if (!current.StartsWith(Marker, StringComparison.Ordinal) || current != item.Content)
+            if (!current.Contains(Marker))
                 throw new IOException($"Refusing to remove modified or unmanaged hook: {item.Path}");
         }
         foreach (var item in plan.Items)
@@ -168,7 +168,7 @@ public sealed class SlsSteamLaunchConfigurationService
         {
             if (!File.Exists(item.Path)) continue;
             var current = File.ReadAllText(item.Path, Utf8);
-            if (!current.StartsWith(Marker, StringComparison.Ordinal) || current != item.Content)
+            if (!current.Contains(Marker))
                 throw new IOException($"Refusing to archive modified or unmanaged hook: {item.Path}");
         }
     }
@@ -197,9 +197,11 @@ public sealed class SlsSteamLaunchConfigurationService
         if (info.LinkTarget is not null || info.Length > 256 * 1024)
             return new SlsSteamLaunchPlanItem(path, content, executable, SlsSteamLaunchItemState.Conflict, "Existing path is not a bounded regular file.");
         var existing = File.ReadAllText(path, Utf8);
-        return existing == content
-            ? new SlsSteamLaunchPlanItem(path, content, executable, SlsSteamLaunchItemState.AlreadyConfigured, null)
-            : new SlsSteamLaunchPlanItem(path, content, executable, SlsSteamLaunchItemState.Conflict, "Existing file is unmanaged or has been modified.");
+        if (existing == content)
+            return new SlsSteamLaunchPlanItem(path, content, executable, SlsSteamLaunchItemState.AlreadyConfigured, null);
+        if (existing.Contains(Marker) || existing.Contains("LD_AUDIT"))
+            return new SlsSteamLaunchPlanItem(path, content, executable, SlsSteamLaunchItemState.Ready, null);
+        return new SlsSteamLaunchPlanItem(path, content, executable, SlsSteamLaunchItemState.Conflict, "Existing file is unmanaged or has been modified.");
     }
 
     private static void ValidateLibraries(SlsSteamPaths paths)

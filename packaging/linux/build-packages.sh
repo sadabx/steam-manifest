@@ -15,7 +15,10 @@ test -x "$cli_dir/tost"
 install -Dm755 "$desktop_dir/TOST.Desktop" "$work_dir/portable/tost"
 install -Dm755 "$cli_dir/tost" "$work_dir/portable/tost-cli"
 install -Dm644 "$repo_root/LICENSE" "$work_dir/portable/LICENSE"
-tar -C "$work_dir/portable" -czf "$output_dir/TOST-${version}-linux-x64.tar.gz" .
+install -Dm644 "$repo_root/packaging/linux/tost.desktop" "$work_dir/portable/tost.desktop"
+install -Dm644 "$repo_root/packaging/linux/tost.appdata.xml" "$work_dir/portable/tost.appdata.xml"
+install -Dm644 "$repo_root/Assets/TOST.png" "$work_dir/portable/tost.png"
+(cd "$work_dir/portable" && tar -czf "$output_dir/TOST-${version}-linux-x64.tar.gz" *)
 
 appdir="$work_dir/TOST.AppDir"
 install -Dm755 "$desktop_dir/TOST.Desktop" "$appdir/usr/bin/tost"
@@ -55,8 +58,31 @@ packager = TOST release workflow
 size = $((installed_size * 1024))
 arch = x86_64
 license = GPL-3.0-only
+depend = fontconfig
+depend = freetype2
+depend = gtk3
+depend = glibc
+depend = libx11
+depend = libxcursor
+depend = libxext
+depend = libxinerama
+depend = libxrandr
+depend = hicolor-icon-theme
 EOF
-tar --zstd --numeric-owner --owner=0 --group=0 -C "$pkgroot" -cf "$output_dir/tost-${version}-1-x86_64.pkg.tar.zst" .
+
+if command -v bsdtar >/dev/null 2>&1; then
+  (cd "$pkgroot" && LANG=C bsdtar -czf .MTREE --format=mtree --options='!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link' .PKGINFO usr)
+fi
+
+(
+  cd "$pkgroot"
+  arch_files=(.PKGINFO)
+  [[ -f .MTREE ]] && arch_files+=(.MTREE)
+  for item in *; do
+    [[ -e "$item" ]] && arch_files+=("$item")
+  done
+  tar --zstd --numeric-owner --owner=0 --group=0 -cf "$output_dir/tost-${version}-1-x86_64.pkg.tar.zst" "${arch_files[@]}"
+)
 
 debroot="$work_dir/debian-root"
 install -Dm755 "$desktop_dir/TOST.Desktop" "$debroot/usr/bin/tost"

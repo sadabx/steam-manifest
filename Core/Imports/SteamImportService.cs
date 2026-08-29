@@ -1,3 +1,4 @@
+using System.Text;
 namespace Trionine.TOST.Core.Imports;
 
 using Trionine.TOST.Core.Steam;
@@ -46,9 +47,60 @@ public sealed class SteamImportService
             return new SteamImportPlanItem(
                 inspection,
                 destination,
-                File.Exists(destination) ? SteamImportPlanState.Conflict : SteamImportPlanState.Ready,
-                File.Exists(destination) ? "Destination already exists; overwriting is disabled." : null);
+                SteamImportPlanState.Ready,
+                null);
         }).ToList();
+
+        var explicitAppManifestIds = items
+            .Where(item => item.Inspection.Kind == SteamImportKind.AppManifest)
+            .SelectMany(item => item.Inspection.AppIds)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var declaredAppIds = items
+            .Where(item => item.Inspection.Kind == SteamImportKind.Lua)
+            .SelectMany(item => item.Inspection.AppIds)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var importedManifests = items
+            .Where(item => item.Inspection.Kind == SteamImportKind.DepotManifest)
+            .Select(item => new SteamLuaManifestDeclaration(
+                item.Inspection.DepotIds.FirstOrDefault() ?? "",
+                item.Inspection.ManifestIds.FirstOrDefault() ?? "",
+                null))
+            .Where(item => !string.IsNullOrEmpty(item.DepotId) && !string.IsNullOrEmpty(item.ManifestId))
+            .Concat(items.Where(item => item.Inspection.Kind == SteamImportKind.Lua).SelectMany(item => item.Inspection.Manifests))
+            .GroupBy(item => item.DepotId, StringComparer.Ordinal)
+            .Select(group => group.Last())
+            .ToArray();
+
+        foreach (var appId in declaredAppIds)
+        {
+            if (explicitAppManifestIds.Contains(appId)) continue;
+            
+            // SLSsteam on Linux handles game unlocking and manifest injection natively. 
+            // Generating virtual app manifests falsely tells Steam the game is fully installed,
+            // or crashes Steam if StateFlags=2 is used. We use steam://install/ instead.
+            if (steam.Kind != SteamInstallationKind.Windows) continue;
+            
+            var destination = Path.GetFullPath(Path.Combine(steam.SteamAppsPath, $"appmanifest_{appId}.acf"));
+            var inspection = new SteamImportInspection(
+                $"virtual:appmanifest_{appId}.acf",
+                SteamImportKind.VirtualAppManifest,
+                0,
+                [appId],
+                [],
+                [],
+                [],
+                [],
+                importedManifests);
+            
+            items.Add(new SteamImportPlanItem(
+                inspection,
+                destination,
+                SteamImportPlanState.Ready,
+                null));
+        }
 
         var duplicateGroups = items
             .GroupBy(item => item.DestinationPath, StringComparer.Ordinal)
@@ -88,20 +140,48 @@ public sealed class SteamImportService
                 var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(item.DestinationPath)}.tost-{Guid.NewGuid():N}.tmp");
                 try
                 {
-                    using (var source = new FileStream(item.Inspection.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    using (var destination = new FileStream(
-                               temporaryPath,
-                               FileMode.CreateNew,
-                               FileAccess.Write,
-                               FileShare.None,
-                               81920,
-                               FileOptions.WriteThrough))
+                    if (item.Inspection.Kind == SteamImportKind.VirtualAppManifest)
                     {
-                        source.CopyTo(destination);
-                        destination.Flush(flushToDisk: true);
+                        var appId = item.Inspection.AppIds.First();
+                        var builder = new StringBuilder();
+                        builder.AppendLine("\"AppState\"");
+                        builder.AppendLine("{");
+                        builder.AppendLine($"\t\"appid\"\t\t\"{appId}\"");
+                        builder.AppendLine("\t\"Universe\"\t\t\"1\"");
+                        builder.AppendLine($"\t\"name\"\t\t\"{appId}\"");
+                        builder.AppendLine("\t\"StateFlags\"\t\t\"2\"");
+                        builder.AppendLine($"\t\"installdir\"\t\t\"{appId}\"");
+                        builder.AppendLine("\t\"InstalledDepots\"");
+                        builder.AppendLine("\t{");
+                        foreach (var manifest in item.Inspection.Manifests)
+                        {
+                            builder.AppendLine($"\t\t\"{manifest.DepotId}\"");
+                            builder.AppendLine("\t\t{");
+                            builder.AppendLine($"\t\t\t\"manifest\"\t\t\"{manifest.ManifestId}\"");
+                            builder.AppendLine($"\t\t\t\"size\"\t\t\"{manifest.Size ?? 0}\"");
+                            builder.AppendLine("\t\t}");
+                        }
+                        builder.AppendLine("\t}");
+                        builder.AppendLine("}");
+                        File.WriteAllText(temporaryPath, builder.ToString(), new System.Text.UTF8Encoding(false));
+                    }
+                    else
+                    {
+                        using (var source = new FileStream(item.Inspection.Path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        using (var destination = new FileStream(
+                                   temporaryPath,
+                                   FileMode.CreateNew,
+                                   FileAccess.Write,
+                                   FileShare.None,
+                                   81920,
+                                   FileOptions.WriteThrough))
+                        {
+                            source.CopyTo(destination);
+                            destination.Flush(flushToDisk: true);
+                        }
                     }
 
-                    File.Move(temporaryPath, item.DestinationPath, overwrite: false);
+                    File.Move(temporaryPath, item.DestinationPath, overwrite: true);
                     completedDestinations.Add(item.DestinationPath);
                 }
                 catch

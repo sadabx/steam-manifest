@@ -86,8 +86,7 @@ public sealed class ManagedGameService
     public GameManagementResult RemoveGames(
         IReadOnlyCollection<ManagedGame> selectedGames,
         IReadOnlyCollection<ManagedGame> allGames,
-        SteamInstallation installation,
-        string recoveryRoot)
+        SteamInstallation installation)
     {
         if (selectedGames.Count == 0) return new(false, "Select at least one game to remove.");
         var selectedLua = selectedGames.Select(game => Path.GetFullPath(game.LuaPath)).ToHashSet(StringComparer.Ordinal);
@@ -98,36 +97,29 @@ public sealed class ManagedGameService
         var sharedCount = selectedGames.SelectMany(game => game.ManifestPaths).Select(Path.GetFullPath)
             .Distinct(StringComparer.Ordinal).Count() - manifestFiles.Length;
 
-        var archiveId = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}";
-        var archiveDirectory = Path.Combine(Path.GetFullPath(recoveryRoot), archiveId);
         var files = new List<RemovedFileEntry>();
         foreach (var game in selectedGames) AddFile(files, "Lua", game.LuaPath, installation.ManagedScriptsPath);
         foreach (var path in manifestFiles) AddFile(files, "Manifest", path, installation.ManagedManifestsPath);
-        var games = selectedGames.Select(game => new RemovedGameEntry(game.AppId, game.DisplayName, Path.GetFileName(game.LuaPath))).ToArray();
-        var metadata = new ArchiveMetadata(archiveId, DateTime.UtcNow, games, files);
-        var completed = new List<(string Source, string Archived)>();
+        
         try
         {
-            Directory.CreateDirectory(archiveDirectory);
             foreach (var file in files)
             {
                 var root = file.Kind == "Lua" ? installation.ManagedScriptsPath : installation.ManagedManifestsPath;
                 var source = Path.Combine(root, file.FileName);
-                var archived = Path.Combine(archiveDirectory, file.ArchiveRelativePath);
-                Directory.CreateDirectory(Path.GetDirectoryName(archived)!);
-                File.Move(source, archived);
-                completed.Add((source, archived));
+                if (File.Exists(source))
+                {
+                    File.Delete(source);
+                }
             }
-            File.WriteAllText(Path.Combine(archiveDirectory, MetadataFileName), JsonSerializer.Serialize(metadata, JsonOptions));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            RollBack(completed);
-            return new(false, $"Could not remove the selected games: {ex.Message}");
+            return new(false, $"Could not remove all selected games: {ex.Message}");
         }
-        var message = $"Archived {files.Count} file{(files.Count == 1 ? "" : "s")}.";
+        var message = $"Permanently deleted {files.Count} file{(files.Count == 1 ? "" : "s")}.";
         if (sharedCount > 0) message += $" Kept {sharedCount} shared manifest{(sharedCount == 1 ? "" : "s")}.";
-        return new(true, message + " Restart Steam to apply the change.", archiveId);
+        return new(true, message + " Restart Steam to apply the change.");
     }
 
     public GameManagementResult RestoreArchive(RemovedGameArchive archive, SteamInstallation installation, string recoveryRoot)

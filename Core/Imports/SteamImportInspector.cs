@@ -7,7 +7,8 @@ public enum SteamImportKind
 {
     Lua,
     DepotManifest,
-    AppManifest
+    AppManifest,
+    VirtualAppManifest
 }
 
 public sealed record SteamImportInspection(

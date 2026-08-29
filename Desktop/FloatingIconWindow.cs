@@ -217,11 +217,11 @@ internal sealed class FloatingIconWindow : Window
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Manage Games", "\u25A3", () => App()?.ShowGameManager()));
         menu.Items.Add(Item("TOST Settings", "\u2699", () => App()?.ShowSettings()));
-        menu.Items.Add(Item("Check for Updates", "\u21BB", async () => await CheckForUpdatesAsync(false)));
+        menu.Items.Add(Item("Check for Updates", "\u2B6F", async () => await CheckForUpdatesAsync(false)));
         menu.Items.Add(Item("Open Logs", "\u25A7", OpenLogs));
         menu.Items.Add(Item("Hide Floating Icon", "\u25C9", () => App()?.HideFloatingIcon()));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Exit", "\u25EF", () => App()?.Exit()));
+        menu.Items.Add(Item("Exit", "\u23FB", () => App()?.Exit()));
         return menu;
     }
 
@@ -421,6 +421,11 @@ internal sealed class FloatingIconWindow : Window
         }
         else
         {
+            if (SteamProcessGuard.IsSteamRunning())
+            {
+                await TostDialog.ShowAsync(this, "Close Steam First", SteamProcessGuard.CloseSteamInstructions);
+                return;
+            }
             summary = DesktopPlatform.ImportLinuxFiles(steam, paths);
         }
 
