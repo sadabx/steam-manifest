@@ -46,7 +46,11 @@ Instead of manually digging through Steam folders to paste `.manifest` and `.lua
 Head over to the [TOST Releases Page](https://github.com/sadabx/TOST/releases) and download the latest version for your operating system.
 
 - **Windows Users**: Download `*-Setup.exe` for a standard installation (recommended), or `*-Portable.zip` if you prefer a standalone directory.
-- **Linux Users**: Download the `.AppImage`, `.deb` (Debian/Ubuntu), `.pkg.tar.zst` (Arch), or the portable `.tar.gz`.
+- **Linux Users**: For a quick, automated installation on Linux, run:
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/sadabx/TOST/main/install.sh | bash
+  ```
+  *(Alternatively, you can manually download the `.AppImage`, `.deb`, `.pkg.tar.zst`, or `.tar.gz`)*
 
 > [!WARNING]
 > **Linux Development Paused**: Linux support is currently experimental and development is paused. Currently, TOST on Linux manages backend configurations and adds games to your Steam library via SLSsteam, but **it cannot automatically download game files**. You will need a third-party tool (like Accela) to download the game files after importing them with TOST.
